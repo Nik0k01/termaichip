@@ -101,7 +101,7 @@ class Gas:
         v_r = fsolve(eqBWR, v_r0, args='reference')
         z_r = p_r * v_r / t_r
         z_1 = 1 / w_r * (z_r - z_0)
-        return float(z_0 + self.w * z_1)
+        return z_0 + self.w * z_1
              
     def cubic(self, p, t, state='vapor', eos='VDW'):
         """
@@ -167,29 +167,57 @@ class Gas:
         q = ps * al / om / t_r
         
         state = state.upper()
+        z_holder = []
+        v_holder = []
         # Coefficients of the cubic equation
-        coefs = [1, 
-                 (sm + ep) * beta - (1 + beta),
-                 beta * (q + ep * sm * beta - (1 + beta) * (sm + ep)),
-                 -beta ** 2 * (q + (1 + beta) * ep * sm)]
-        cubic_eq = np.polynomial.Polynomial(coefs[::-1])
-        if state == 'V' or state == 'VAPOR':
-            z = cubic_eq.roots()
-            # Cut the left over imaginary part
-            z = z.real[abs(z.imag)<1e-5]
-            z = max(z)
-            v = z * R * t / p
-            return z, v
-        if state == 'L' or state == 'LIQUID':
-            z = cubic_eq.roots()
-            # Cut the left over imaginary part
-            z = z.real[abs(z.imag)<1e-5]
-            z = min(z)
-            v = z * R * t / p
-            return z, v
+        for item_beta, item_q in zip(beta, q):
+            coefs = [1, 
+                     (sm + ep) * item_beta - (1 + item_beta),
+                     item_beta * (item_q + ep * sm * item_beta - 
+                                  (1 + item_beta) * (sm + ep)),
+                     -item_beta** 2 * (item_q + (1 + item_beta) * ep * sm)]
+            cubic_eq = np.polynomial.Polynomial(coefs[::-1])
+            if state == 'V' or state == 'VAPOR':
+                z = cubic_eq.roots()
+                # Cut the left over imaginary part
+                z = z.real[abs(z.imag)<1e-5]
+                z = max(z)
+                z_holder.append(z)
+                v = z * R * t / p
+                v_holder.append(v)
+            if state == 'L' or state == 'LIQUID':
+                z = cubic_eq.roots()
+                # Cut the left over imaginary part
+                z = z.real[abs(z.imag)<1e-5]
+                z = min(z)
+                z_holder.append(z)
+                v = z * R * t / p
+                v_holder.append(v)             
+        return z_holder, v_holder
     
 if __name__ == "__main__":
-    gas = Gas(37.96, 350, 0.2)
-    print(f'{gas.leekessler(9.4573, 350):.5f}')
-    print(f'{gas.virial(9.4573, 350)[0]:.5f}')
-    print(f'{gas.cubic(9.4573, 350, "V", "SRK")[0]:.5f}')
+    ammonia = Gas(112.8, 405.65, 0.252608)
+    butane = Gas(37.9, 425.12, 0.200164)
+    nitrogen = Gas(34, 126.2, 0.0377215)
+    co2 = Gas(73.83, 304.21, 0.223621)
+    methane = Gas(45.99, 190.564, 0.0115478)
+    gases = [ammonia, butane, nitrogen, co2, methane]
+    names = ['ammonia', 'butane', 'nitrogen', 'co2', 'methane']
+    
+    p_range = np.linspace(20, 150, num=100)
+    t_range = np.linspace(293, 800, num=100)
+    
+    z_virial = np.array([gas.virial(p_range, t_range)[0] for gas in gases])
+    z_virial = pd.DataFrame(z_virial.T, columns=names)
+        
+    z_vdw = np.array([gas.cubic(p_range, t_range)[0] for gas in gases])
+    z_vdw = pd.DataFrame(z_vdw.T, columns=names)
+    
+    z_srk = np.array([gas.cubic(p_range, t_range, eos='SRK')[0] for gas in gases])
+    z_srk = pd.DataFrame(z_srk.T, columns=names)
+    
+    
+    
+    # print(f'{gas.leekessler(9.4573, 350):.5f}')
+    # print(f'{gas.virial(9.4573, 350)[0]:.5f}')
+    # print(f'{gas.cubic(9.4573, 350, "V", "SRK")[0]:.5f}')
