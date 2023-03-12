@@ -103,7 +103,7 @@ class Gas:
         z_1 = 1 / w_r * (z_r - z_0)
         return float(z_0 + self.w * z_1)
              
-    def cubic(self, t, p, state='gas', eos='VDW'):
+    def cubic(self, p, t, state='vapor', eos='VDW'):
         """
         Estimation of the compressibility and molar volume using cubic 
         equations of state.
@@ -127,27 +127,69 @@ class Gas:
         """
         t_r = t / self.t_crit
         p_r = p / self.p_crit
-        R = Gas.R
+        R = Gas.R * 10
         w = self.w
         eos = eos.upper()
         
+        # Set parameters of the cubic equation
         if eos == 'VDW':
-            sm = 0; ep = 0; om = 0.125; ps = 0.42188; mx = [0]
+            sm = 0
+            ep = 0
+            om = 0.125
+            ps = 0.42188
+            al = 1
         elif eos == 'RK':
-            ep = 0; sm = 1; om = 0.08664; ps = 0.42748; al = 1 / np.sqrt(t_r)
+            ep = 0
+            sm = 1
+            om = 0.08664
+            ps = 0.42748
             mx = (t_r ** 0.25 - 1)  / (1 - np.sqrt(t_r))
+            al = t_r ** -0.5
         elif eos == 'SRK':
-            ep = 0; sm = 1; om = 0.08664; ps = 0.42748
-            al = (1 + (0.48 + 1.574 * w - 0.176 * w ** 2) 
-                  * (1 - np.sqrt(t_r))) ** 2 
+            ep = 0
+            sm = 1
+            om = 0.08664
+            ps = 0.42748
             mc = np.array([0.48, 1.574, 0.176])
             mx = np.array([1, w, -w ** 2]) @ mc
-        
+            al = (1 + mx * (1 - t_r ** 0.5)) ** 2
+        elif eos == 'PR':
+            ep = 1 - np.sqrt(2)
+            sm = 1 + np.sqrt(2)
+            om = 0.07780
+            ps = 0.45724
+            mc = [0.37464, 1.54226, 0.26992]
+            mx = np.array([1, w, -w ** 2]) @ mc
+            al = (1 + mx * (1 - t_r ** 0.5)) ** 2
+                                     
 
-        pass                                 
+        beta = om * p_r / t_r
+        q = ps * al / om / t_r
         
+        state = state.upper()
+        # Coefficients of the cubic equation
+        coefs = [1, 
+                 (sm + ep) * beta - (1 + beta),
+                 beta * (q + ep * sm * beta - (1 + beta) * (sm + ep)),
+                 -beta ** 2 * (q + (1 + beta) * ep * sm)]
+        cubic_eq = np.polynomial.Polynomial(coefs[::-1])
+        if state == 'V' or state == 'VAPOR':
+            z = cubic_eq.roots()
+            # Cut the left over imaginary part
+            z = z.real[abs(z.imag)<1e-5]
+            z = max(z)
+            v = z * R * t / p
+            return z, v
+        if state == 'L' or state == 'LIQUID':
+            z = cubic_eq.roots()
+            # Cut the left over imaginary part
+            z = z.real[abs(z.imag)<1e-5]
+            z = min(z)
+            v = z * R * t / p
+            return z, v
     
 if __name__ == "__main__":
-    gas = Gas(40, 419.6, 0.191)
-    print(f'{gas.leekessler(20, 400):.5f}')
-    print(f'{gas.virial(20, 400)[0]:.5f}')
+    gas = Gas(37.96, 350, 0.2)
+    print(f'{gas.leekessler(9.4573, 350):.5f}')
+    print(f'{gas.virial(9.4573, 350)[0]:.5f}')
+    print(f'{gas.cubic(9.4573, 350, "V", "SRK")[0]:.5f}')
