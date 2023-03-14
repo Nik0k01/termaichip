@@ -169,6 +169,9 @@ class Gas:
         state = state.upper()
         z_holder = []
         v_holder = []
+        # In case we pase one temperature at the time but multiple pressures
+        if beta.size != q.size:
+            q = np.ones(beta.size) * q
         # Coefficients of the cubic equation
         for item_beta, item_q in zip(beta, q):
             coefs = [1, 
@@ -196,25 +199,44 @@ class Gas:
         return z_holder, v_holder
     
 if __name__ == "__main__":
+    import matplotlib.pyplot as plt
     ammonia = Gas(112.8, 405.65, 0.252608)
     butane = Gas(37.9, 425.12, 0.200164)
     nitrogen = Gas(34, 126.2, 0.0377215)
     co2 = Gas(73.83, 304.21, 0.223621)
     methane = Gas(45.99, 190.564, 0.0115478)
-    gases = [ammonia, butane, nitrogen, co2, methane]
-    names = ['ammonia', 'butane', 'nitrogen', 'co2', 'methane']
+    # gases = [ammonia] # , butane, nitrogen, co2, methane]
+    gas = ammonia
+    names = ['ammonia'] #, 'butane', 'nitrogen', 'co2', 'methane']
     
-    p_range = np.linspace(20, 150, num=100)
-    t_range = np.linspace(293, 800, num=100)
+    p_range = np.linspace(20, 150, num=1000)
+    t_range = np.linspace(293, 800, num=7)
     
-    z_virial = np.array([gas.virial(p_range, t_range)[0] for gas in gases])
-    z_virial = pd.DataFrame(z_virial.T, columns=names)
+    p_r = np.array([p_range / gas.p_crit])
+    p_r = pd.DataFrame(p_r.T, columns=names)
+    
+    t_r = np.array([t_range / gas.t_crit])
+    t_r = pd.DataFrame(t_r.T, columns=names)
+    column_names = [str(t) for t in round(t_r['ammonia'], 2)]
+    
+    z_virial = np.array([gas.virial(p_range, t)[0] for t in t_range])
+    z_virial = pd.DataFrame(z_virial.T, columns=column_names)
         
-    z_vdw = np.array([gas.cubic(p_range, t_range)[0] for gas in gases])
-    z_vdw = pd.DataFrame(z_vdw.T, columns=names)
+    z_vdw = np.array([gas.cubic(p_range, t)[0] for t in t_range])
+    z_vdw = pd.DataFrame(z_vdw.T, columns=column_names)
     
-    z_srk = np.array([gas.cubic(p_range, t_range, eos='SRK')[0] for gas in gases])
-    z_srk = pd.DataFrame(z_srk.T, columns=names)
+    z_srk = np.array([gas.cubic(p_range, t, eos='SRK')[0] for t in t_range])
+    z_srk = pd.DataFrame(z_srk.T, columns=column_names)
+    
+    legend = ['t_r = {}'.format(t) for t in column_names]
+    plt.figure(1, figsize=[7, 5], dpi=120)
+    plt.plot(p_r, z_srk, label=legend)
+    plt.xlabel("Reduced Pressure")
+    plt.ylabel("Compressibility factor z")
+    plt.legend(loc='right')
+    plt.autoscale()
+    plt.savefig('example_plot.png')
+    
     
     
     
